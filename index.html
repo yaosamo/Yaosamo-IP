@@ -13,31 +13,84 @@
         <div class="eyebrow">PUBLIC IP ADDRESS</div>
         <h1 id="ip-address" class="ip-value">LOADING...</h1>
         <div id="ip-summary" class="summary-line">FETCHING NETWORK DETAILS...</div>
+        <div class="snapshot-grid" id="snapshot-grid" aria-label="Quick IP summary">
+          <div class="snapshot-card">
+            <div class="snapshot-key">COUNTRY</div>
+            <div class="snapshot-value" id="snap-country">N/A</div>
+          </div>
+          <div class="snapshot-card">
+            <div class="snapshot-key">CITY</div>
+            <div class="snapshot-value" id="snap-city">N/A</div>
+          </div>
+          <div class="snapshot-card">
+            <div class="snapshot-key">ISP</div>
+            <div class="snapshot-value" id="snap-isp">N/A</div>
+          </div>
+          <div class="snapshot-card">
+            <div class="snapshot-key">TIMEZONE</div>
+            <div class="snapshot-value" id="snap-timezone">N/A</div>
+          </div>
+          <div class="snapshot-card">
+            <div class="snapshot-key">BROWSER TZ</div>
+            <div class="snapshot-value" id="snap-browser-tz">N/A</div>
+          </div>
+          <div class="snapshot-card">
+            <div class="snapshot-key">VIEWPORT</div>
+            <div class="snapshot-value" id="snap-viewport">N/A</div>
+          </div>
+        </div>
       </header>
 
       <section class="grid" aria-label="IP and device diagnostics">
         <section class="panel" id="panel-network">
-          <h2>NETWORK</h2>
+          <div class="panel-head">
+            <h2>NETWORK</h2>
+            <div class="panel-count" id="network-count">0 FIELDS</div>
+          </div>
           <div class="rows" id="network-rows"></div>
         </section>
 
         <section class="panel" id="panel-geo">
-          <h2>GEO / TIME</h2>
+          <div class="panel-head">
+            <h2>GEO / TIME</h2>
+            <div class="panel-count" id="geo-count">0 FIELDS</div>
+          </div>
           <div class="rows" id="geo-rows"></div>
         </section>
 
         <section class="panel" id="panel-browser">
-          <h2>BROWSER</h2>
+          <div class="panel-head">
+            <h2>BROWSER</h2>
+            <div class="panel-count" id="browser-count">0 FIELDS</div>
+          </div>
           <div class="rows" id="browser-rows"></div>
         </section>
 
         <section class="panel" id="panel-device">
-          <h2>DEVICE / SCREEN</h2>
+          <div class="panel-head">
+            <h2>DEVICE / SCREEN</h2>
+            <div class="panel-count" id="device-count">0 FIELDS</div>
+          </div>
           <div class="rows" id="device-rows"></div>
         </section>
 
+        <section class="panel wide" id="panel-speed">
+          <div class="panel-head">
+            <h2>SPEED TEST</h2>
+            <div class="panel-count" id="speed-count">0 FIELDS</div>
+          </div>
+          <div class="speed-toolbar">
+            <button id="run-speed-test" class="speed-btn" type="button">RUN TEST</button>
+            <div id="speed-status" class="speed-status">READY</div>
+          </div>
+          <div class="rows" id="speed-rows"></div>
+        </section>
+
         <section class="panel wide" id="panel-raw">
-          <h2>RAW JSON</h2>
+          <div class="panel-head">
+            <h2>RAW JSON</h2>
+            <div class="panel-count">LIVE DUMP</div>
+          </div>
           <pre id="raw-json" class="raw-json">{}</pre>
         </section>
       </section>
