@@ -1,4 +1,5 @@
 const els = {
+  heroKicker: document.getElementById('hero-kicker'),
   ip: document.getElementById('ip-address'),
   summary: document.getElementById('ip-summary'),
   snapCountry: document.getElementById('snap-country'),
@@ -11,18 +12,51 @@ const els = {
   geoCount: document.getElementById('geo-count'),
   browserCount: document.getElementById('browser-count'),
   deviceCount: document.getElementById('device-count'),
+  speedCount: document.getElementById('speed-count'),
   networkRows: document.getElementById('network-rows'),
   geoRows: document.getElementById('geo-rows'),
   browserRows: document.getElementById('browser-rows'),
   deviceRows: document.getElementById('device-rows'),
+  speedRows: document.getElementById('speed-rows'),
+  runSpeedTest: document.getElementById('run-speed-test'),
+  ctrlReplayAll: document.getElementById('ctrl-replay-all'),
+  ctrlResetAscii: document.getElementById('ctrl-reset-ascii'),
+  ctrlBaseMs: document.getElementById('ctrl-base-ms'),
+  ctrlBaseMsValue: document.getElementById('ctrl-base-ms-value'),
+  ctrlCharMs: document.getElementById('ctrl-char-ms'),
+  ctrlCharMsValue: document.getElementById('ctrl-char-ms-value'),
+  ctrlMinMs: document.getElementById('ctrl-min-ms'),
+  ctrlMinMsValue: document.getElementById('ctrl-min-ms-value'),
+  ctrlMaxMs: document.getElementById('ctrl-max-ms'),
+  ctrlMaxMsValue: document.getElementById('ctrl-max-ms-value'),
+  ctrlHoverCooldown: document.getElementById('ctrl-hover-cooldown'),
+  ctrlHoverCooldownValue: document.getElementById('ctrl-hover-cooldown-value'),
+  ctrlAsciiChars: document.getElementById('ctrl-ascii-chars'),
+  ctrlAsciiSample: document.getElementById('ctrl-ascii-sample'),
+  panelAsciiControlsTest: document.getElementById('panel-ascii-controls-test'),
   rawJson: document.getElementById('raw-json'),
   rowTemplate: document.getElementById('row-template')
 };
 
 const state = {
   ipApi: null,
-  client: null
+  client: null,
+  speedTest: null,
+  asciiFx: {
+    baseMs: 900,
+    charMs: 150,
+    minMs: 500,
+    maxMs: 3000,
+    hoverCooldownMs: 3000,
+    chars: '01#*+=-[]{}<>/\\\\|:;.^~_xX'
+  }
 };
+
+const ASCII_REVEAL_CHARS = '01#*+=-[]{}<>/\\\\|:;.^~_xX';
+const ASCII_TUNING_DEFAULTS = Object.freeze({ ...state.asciiFx });
+const asciiRevealTokens = new WeakMap();
+const asciiCharHoverTokens = new WeakMap();
+const asciiCharHoverActive = new WeakSet();
 
 const FIELD_TOOLTIPS = {
   IP: 'YOUR PUBLIC INTERNET ADDRESS AS SEEN BY THE LOOKUP SERVICE.',
@@ -73,7 +107,17 @@ const FIELD_TOOLTIPS = {
   WEBDRIVER: 'TRUE CAN INDICATE AUTOMATION / WEBDRIVER-CONTROLLED BROWSER.',
   'MAX TOUCH POINTS': 'MAXIMUM TOUCH CONTACTS SUPPORTED BY THE DEVICE.',
   'SECURE CONTEXT': 'WHETHER THE PAGE IS RUNNING IN HTTPS/LOCALHOST SECURE CONTEXT.',
-  REFERRER: 'PAGE URL THAT REFERRED THE USER HERE (IF ANY).'
+  REFERRER: 'PAGE URL THAT REFERRED THE USER HERE (IF ANY).',
+  'TEST STATUS': 'CURRENT OR LAST SPEED TEST STATUS.',
+  'MEASURED PING (MS)': 'MEDIAN LATENCY MEASURED USING MULTIPLE SMALL FETCH REQUESTS.',
+  'MEASURED DOWNLOAD (MBPS)': 'ESTIMATED DOWNLOAD THROUGHPUT FROM A TEST FILE FETCH.',
+  'TRANSFER BYTES': 'NUMBER OF BYTES DOWNLOADED DURING THE SPEED TEST.',
+  'TRANSFER TIME (MS)': 'TIME SPENT DOWNLOADING THE TEST PAYLOAD.',
+  'TOTAL TEST TIME (MS)': 'FULL SPEED TEST DURATION INCLUDING LATENCY CHECKS.',
+  'EST DOWNLINK (MBPS)': 'BROWSER-REPORTED BANDWIDTH ESTIMATE (NOT MEASURED).',
+  'EST RTT (MS)': 'BROWSER-REPORTED LATENCY ESTIMATE (NOT MEASURED).',
+  SERVER: 'SERVER USED FOR THE SPEED TEST REQUESTS.',
+  'TESTED AT': 'TIMESTAMP WHEN THE LAST SPEED TEST FINISHED.'
 };
 
 const SNAPSHOT_TOOLTIPS = {
@@ -89,9 +133,26 @@ init();
 
 async function init() {
   applyStaticTooltips();
+  bindAsciiControlsVisibilityToggle();
+  bindAsciiTestControls();
+  primeAsciiStaticTexts();
+  bindAsciiHoverReplay();
+  bindIpAutofit();
   const client = collectClientData();
   state.client = client;
+  renderHeroCopy(client);
   renderClientSections(client);
+  renderSpeedPanel(client, null);
+  bindSpeedTest();
+  let seededIp = null;
+  const ipSeedTask = fetchPublicIpOnly()
+    .then((ip) => {
+      if (!ip) return null;
+      seededIp = ip;
+      setAsciiText(els.ip, ip, { onFrame: fitIpHeading, onDone: fitIpHeading });
+      return ip;
+    })
+    .catch(() => null);
 
   try {
     const ipData = await fetchIpData();
@@ -99,10 +160,68 @@ async function init() {
     renderIpData(ipData, client);
     renderRawJson();
   } catch (error) {
-    els.ip.textContent = 'UNAVAILABLE';
-    els.summary.textContent = String(error?.message || error || 'IP LOOKUP FAILED').toUpperCase();
+    await ipSeedTask;
+    if (seededIp) {
+      const ipOnly = normalizeIpOnly(seededIp);
+      state.ipApi = ipOnly;
+      renderIpData(ipOnly, client);
+      setAsciiText(els.summary, "I could read your IP, but the location provider didn't return full details.");
+    } else {
+      setAsciiText(els.ip, 'UNAVAILABLE', { onFrame: fitIpHeading, onDone: fitIpHeading });
+      setAsciiText(els.summary, "I couldn't read your public IP details right now.");
+    }
     renderRawJson({ error: String(error) });
   }
+}
+
+function bindAsciiControlsVisibilityToggle() {
+  window.addEventListener('keydown', (event) => {
+    const key = String(event.key || '').toLowerCase();
+    if (key !== 'k') return;
+    if (!(event.metaKey || event.ctrlKey)) return;
+
+    event.preventDefault();
+    const panel = els.panelAsciiControlsTest;
+    if (!panel) return;
+    panel.classList.toggle('is-test-hidden');
+  });
+}
+
+async function fetchPublicIpOnly() {
+  const attempts = [];
+  const providers = [
+    async () => {
+      const res = await fetch('https://api64.ipify.org?format=json', { headers: { accept: 'application/json' } });
+      if (!res.ok) throw new Error(`IPIFY64 HTTP ${res.status}`);
+      const data = await res.json();
+      return data?.ip;
+    },
+    async () => {
+      const res = await fetch('https://api.ipify.org?format=json', { headers: { accept: 'application/json' } });
+      if (!res.ok) throw new Error(`IPIFY HTTP ${res.status}`);
+      const data = await res.json();
+      return data?.ip;
+    },
+    async () => {
+      const res = await fetch('https://ipwho.is/', { headers: { accept: 'application/json' } });
+      if (!res.ok) throw new Error(`IPWHO.IS HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && data.success === false) throw new Error(data.message || 'IPWHO.IS FAILED');
+      return data?.ip;
+    }
+  ];
+
+  for (const provider of providers) {
+    try {
+      const ip = await provider();
+      if (ip) return ip;
+      attempts.push('MISSING IP');
+    } catch (error) {
+      attempts.push(String(error?.message || error));
+    }
+  }
+
+  throw new Error(`PUBLIC IP FAILED / ${attempts.join(' / ')}`);
 }
 
 async function fetchIpData() {
@@ -119,6 +238,16 @@ async function fetchIpData() {
   }
 
   try {
+    const res = await fetch('https://ipwhois.io/', { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`IPWHOIS.IO HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.success === false) throw new Error(data.message || 'IPWHOIS.IO FAILED');
+    return normalizeIpWhoisIo(data);
+  } catch (error) {
+    attempts.push(String(error?.message || error));
+  }
+
+  try {
     const res = await fetch('https://ipapi.co/json/', { headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`IPAPI.CO HTTP ${res.status}`);
     const data = await res.json();
@@ -128,7 +257,60 @@ async function fetchIpData() {
     attempts.push(String(error?.message || error));
   }
 
+  try {
+    const res = await fetch('https://api64.ipify.org?format=json', { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`IPIFY HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data?.ip) throw new Error('IPIFY MISSING IP');
+    return normalizeIpOnly(data.ip);
+  } catch (error) {
+    attempts.push(String(error?.message || error));
+  }
+
   throw new Error(`IP LOOKUP FAILED / ${attempts.join(' / ')}`);
+}
+
+function normalizeIpOnly(ip) {
+  return {
+    ip,
+    type: inferIpType(ip),
+    connection: {},
+    timezone: {},
+    flag: {}
+  };
+}
+
+function normalizeIpWhoisIo(data) {
+  const tzId = data.timezone?.id;
+  return {
+    ip: data.ip,
+    type: data.type,
+    country: data.country,
+    country_code: data.country_code,
+    region: data.region,
+    city: data.city,
+    postal: data.postal,
+    latitude: numberOrUndefined(data.latitude),
+    longitude: numberOrUndefined(data.longitude),
+    connection: {
+      isp: data.connection?.isp,
+      org: data.connection?.org,
+      asn: data.connection?.asn,
+      domain: data.connection?.domain,
+      hostname: data.connection?.hostname
+    },
+    flag: {
+      emoji: data.flag?.emoji
+    },
+    timezone: {
+      id: tzId,
+      abbr: data.timezone?.abbr,
+      utc: data.timezone?.utc,
+      current_time: tzId ? currentTimeForZone(tzId) : undefined,
+      is_dst: typeof data.timezone?.is_dst === 'boolean' ? data.timezone.is_dst : (tzId ? isDstNowInZone(tzId) : undefined)
+    },
+    security: data.security
+  };
 }
 
 function normalizeIpApiCo(data) {
@@ -167,8 +349,8 @@ function normalizeIpApiCo(data) {
 }
 
 function renderIpData(ipData, client) {
-  els.ip.textContent = ipData.ip || 'UNKNOWN';
-  els.summary.textContent = compactSummary(ipData, client);
+  setAsciiText(els.ip, ipData.ip || 'UNKNOWN', { onFrame: fitIpHeading, onDone: fitIpHeading });
+  setAsciiText(els.summary, compactSummary(ipData, client));
   renderSnapshots(ipData, client);
 
   renderRows(els.networkRows, [
@@ -197,6 +379,48 @@ function renderIpData(ipData, client) {
     ['DST', yesNo(ipData.timezone?.is_dst)],
     ['COUNTRY FLAG', ipData.flag?.emoji || ipData.flag?.unicode]
   ], els.geoCount);
+}
+
+function renderHeroCopy(client) {
+  if (!els.heroKicker) return;
+  if (isMacDevice(client)) {
+    setAsciiText(els.heroKicker, 'NICE LOOKING MAC! YOUR IP ADDRESS IS');
+    return;
+  }
+  const device = friendlyDeviceName(client);
+  setAsciiText(els.heroKicker, `YOU'RE USING ${device.toUpperCase()}. GREAT CHOICE. YOUR IP ADDRESS IS`);
+}
+
+function bindIpAutofit() {
+  let rafId = 0;
+  const schedule = () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      fitIpHeading();
+    });
+  };
+  window.addEventListener('resize', schedule, { passive: true });
+  window.addEventListener('load', schedule, { once: true });
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(schedule).catch(() => {});
+  }
+  schedule();
+}
+
+function fitIpHeading() {
+  const el = els.ip;
+  if (!el) return;
+
+  const maxPx = 72;
+  const minPx = 18;
+  el.style.fontSize = `${maxPx}px`;
+
+  // Shrink until the text fits the hero content width.
+  while (el.scrollWidth > el.clientWidth && parseFloat(el.style.fontSize) > minPx) {
+    el.style.fontSize = `${Math.max(minPx, parseFloat(el.style.fontSize) - 1)}px`;
+    if (parseFloat(el.style.fontSize) <= minPx) break;
+  }
 }
 
 function renderClientSections(client) {
@@ -240,11 +464,106 @@ function renderClientSections(client) {
   ], els.deviceCount);
 }
 
+function renderSpeedPanel(client, result) {
+  const entries = [
+    ['TEST STATUS', result?.status || 'READY'],
+    ['MEASURED PING (MS)', result?.latencyMs],
+    ['MEASURED DOWNLOAD (MBPS)', result?.downloadMbps],
+    ['TRANSFER BYTES', result?.bytes],
+    ['TRANSFER TIME (MS)', result?.downloadMs],
+    ['TOTAL TEST TIME (MS)', result?.totalMs],
+    ['EST DOWNLINK (MBPS)', client?.downlink],
+    ['EST RTT (MS)', client?.rtt],
+    ['EFFECTIVE TYPE', client?.effectiveType],
+    ['CONNECTION TYPE', client?.connectionType],
+    ['SERVER', result?.server || 'CLOUDFLARE SPEED'],
+    ['TESTED AT', result?.testedAt]
+  ];
+
+  renderRows(els.speedRows, entries, els.speedCount);
+}
+
+function bindSpeedTest() {
+  if (!els.runSpeedTest) return;
+  els.runSpeedTest.addEventListener('click', async () => {
+    if (els.runSpeedTest.disabled) return;
+    els.runSpeedTest.disabled = true;
+    renderSpeedPanel(state.client, { status: 'RUNNING', statusLabel: 'RUNNING TEST...' });
+
+    try {
+      const result = await runSpeedTest();
+      state.speedTest = result;
+      renderSpeedPanel(state.client, result);
+      renderRawJson();
+    } catch (error) {
+      state.speedTest = {
+        status: 'FAILED',
+        statusLabel: `TEST FAILED: ${String(error?.message || error)}`,
+        error: String(error?.message || error),
+        testedAt: new Date().toISOString()
+      };
+      renderSpeedPanel(state.client, state.speedTest);
+      renderRawJson();
+    } finally {
+      els.runSpeedTest.disabled = false;
+    }
+  });
+}
+
+async function runSpeedTest() {
+  const started = performance.now();
+  const latencyMs = await measureLatencyMs();
+  const download = await measureDownloadMbps();
+  const totalMs = Math.round(performance.now() - started);
+
+  return {
+    status: 'COMPLETED',
+    statusLabel: `DONE / ${formatMbps(download.mbps)} MBPS`,
+    latencyMs: round1(latencyMs),
+    downloadMbps: formatMbps(download.mbps),
+    bytes: download.bytes,
+    downloadMs: Math.round(download.ms),
+    totalMs,
+    server: 'SPEED.CLOUDFLARE.COM',
+    testedAt: new Date().toISOString()
+  };
+}
+
+async function measureLatencyMs() {
+  const attempts = [];
+  for (let i = 0; i < 3; i += 1) {
+    const t0 = performance.now();
+    const res = await fetch(`https://www.cloudflare.com/cdn-cgi/trace?ts=${Date.now()}-${i}`, {
+      cache: 'no-store',
+      mode: 'cors'
+    });
+    if (!res.ok) throw new Error(`LATENCY HTTP ${res.status}`);
+    await res.text();
+    attempts.push(performance.now() - t0);
+  }
+  attempts.sort((a, b) => a - b);
+  return attempts[Math.floor(attempts.length / 2)];
+}
+
+async function measureDownloadMbps() {
+  const bytes = 5_000_000;
+  const url = `https://speed.cloudflare.com/__down?bytes=${bytes}&nocache=${Date.now()}`;
+  const t0 = performance.now();
+  const res = await fetch(url, { cache: 'no-store', mode: 'cors' });
+  if (!res.ok) throw new Error(`DOWNLOAD HTTP ${res.status}`);
+  const blob = await res.blob();
+  const ms = performance.now() - t0;
+  const measuredBytes = blob.size || bytes;
+  const mbps = (measuredBytes * 8) / (ms / 1000) / 1_000_000;
+  return { bytes: measuredBytes, ms, mbps };
+}
+
 function renderRawJson(extra = {}) {
   els.rawJson.textContent = JSON.stringify({
     ...extra,
     ipApi: state.ipApi,
-    client: state.client
+    client: state.client,
+    speedTest: state.speedTest
   }, null, 2);
 }
 
@@ -255,16 +574,19 @@ function renderRows(container, entries, countEl) {
     const node = els.rowTemplate.content.firstElementChild.cloneNode(true);
     const keyEl = node.querySelector('.key');
     const valueEl = node.querySelector('.value');
-    keyEl.textContent = String(key || 'FIELD').toUpperCase();
-    applyFieldTooltip(keyEl, keyEl.textContent);
+    const keyText = String(key || 'FIELD').toUpperCase();
+    keyEl.classList.add('ascii-fx');
+    valueEl.classList.add('ascii-fx');
+    setAsciiText(keyEl, keyText);
+    applyFieldTooltip(keyEl, keyText);
     const value = normalizeDisplayValue(rawValue);
-    valueEl.textContent = value;
+    setAsciiText(valueEl, value);
     if (value === 'N/A' || value === 'UNKNOWN') valueEl.classList.add('is-empty');
     if (/YES$/.test(value) && /(ONLINE|SECURE|DST|MOBILE|COOKIES|ROUTEABLE)/.test(keyEl.textContent)) valueEl.classList.add('is-accent');
     if (/PROXY|TOR|VPN/.test(keyEl.textContent) && value !== 'NONE DETECTED') valueEl.classList.add('is-warn');
     container.appendChild(node);
   }
-  if (countEl) countEl.textContent = `${normalizedEntries.length} FIELDS`;
+  if (countEl) setAsciiText(countEl, `${normalizedEntries.length} FIELDS`);
 }
 
 function applyStaticTooltips() {
@@ -277,7 +599,9 @@ function applyStaticTooltips() {
       keyEl.setAttribute('aria-label', `${keyEl.textContent}: ${text}`);
     }
   }
-
+  if (els.runSpeedTest) {
+    els.runSpeedTest.title = 'RUNS A LIGHTWEIGHT BROWSER SPEED TEST (PING + DOWNLOAD).';
+  }
 }
 
 function applyFieldTooltip(el, key) {
@@ -288,7 +612,7 @@ function applyFieldTooltip(el, key) {
 }
 
 function renderSnapshots(ipData, client) {
-  setText(els.snapCountry, ipData.country_code ? `${ipData.flag?.emoji || ''} ${ipData.country_code}`.trim() : ipData.country);
+  setText(els.snapCountry, ipData.country_code || ipData.country);
   setText(els.snapCity, [ipData.city, ipData.region].filter(Boolean).join(', '));
   setText(els.snapIsp, ipData.connection?.isp);
   setText(els.snapTimezone, ipData.timezone?.id || ipData.timezone?.abbr);
@@ -303,18 +627,317 @@ function renderSnapshotBrowser(client) {
 
 function setText(el, value) {
   if (!el) return;
-  el.textContent = normalizeDisplayValue(value);
+  setAsciiText(el, normalizeDisplayValue(value));
+}
+
+function primeAsciiStaticTexts() {
+  const selectors = [
+    '.panel h2',
+    '.panel-count',
+    '.snapshot-key',
+    '.speed-btn'
+  ];
+  document.querySelectorAll(selectors.join(',')).forEach((el) => {
+    setAsciiText(el, el.textContent || '', { force: true });
+  });
+}
+
+function bindAsciiTestControls() {
+  const sliderConfigs = [
+    ['baseMs', els.ctrlBaseMs, els.ctrlBaseMsValue],
+    ['charMs', els.ctrlCharMs, els.ctrlCharMsValue],
+    ['minMs', els.ctrlMinMs, els.ctrlMinMsValue],
+    ['maxMs', els.ctrlMaxMs, els.ctrlMaxMsValue],
+    ['hoverCooldownMs', els.ctrlHoverCooldown, els.ctrlHoverCooldownValue]
+  ];
+
+  for (const [key, inputEl, valueEl] of sliderConfigs) {
+    if (!(inputEl instanceof HTMLInputElement) || !(valueEl instanceof HTMLElement)) continue;
+    const sync = () => {
+      state.asciiFx[key] = Number(inputEl.value);
+      normalizeAsciiTuningRanges();
+      valueEl.textContent = String(state.asciiFx[key]);
+    };
+    inputEl.value = String(state.asciiFx[key]);
+    sync();
+    inputEl.addEventListener('input', sync);
+  }
+
+  if (els.ctrlAsciiChars instanceof HTMLInputElement) {
+    els.ctrlAsciiChars.value = state.asciiFx.chars;
+    els.ctrlAsciiChars.addEventListener('input', () => {
+      state.asciiFx.chars = els.ctrlAsciiChars.value || ASCII_REVEAL_CHARS;
+      replayAsciiSample();
+    });
+  }
+
+  if (els.ctrlReplayAll) {
+    els.ctrlReplayAll.addEventListener('click', () => replayAllAsciiTexts());
+  }
+
+  if (els.ctrlResetAscii) {
+    els.ctrlResetAscii.addEventListener('click', () => {
+      state.asciiFx = { ...ASCII_TUNING_DEFAULTS };
+      applyAsciiControlStateToInputs();
+      replayAsciiSample();
+      replayAllAsciiTexts();
+    });
+  }
+
+  replayAsciiSample();
+}
+
+function normalizeAsciiTuningRanges() {
+  if (state.asciiFx.minMs > state.asciiFx.maxMs) {
+    state.asciiFx.maxMs = state.asciiFx.minMs;
+    if (els.ctrlMaxMs instanceof HTMLInputElement) els.ctrlMaxMs.value = String(state.asciiFx.maxMs);
+    if (els.ctrlMaxMsValue) els.ctrlMaxMsValue.textContent = String(state.asciiFx.maxMs);
+  }
+}
+
+function applyAsciiControlStateToInputs() {
+  const items = [
+    [els.ctrlBaseMs, els.ctrlBaseMsValue, state.asciiFx.baseMs],
+    [els.ctrlCharMs, els.ctrlCharMsValue, state.asciiFx.charMs],
+    [els.ctrlMinMs, els.ctrlMinMsValue, state.asciiFx.minMs],
+    [els.ctrlMaxMs, els.ctrlMaxMsValue, state.asciiFx.maxMs],
+    [els.ctrlHoverCooldown, els.ctrlHoverCooldownValue, state.asciiFx.hoverCooldownMs]
+  ];
+  for (const [inputEl, valueEl, value] of items) {
+    if (inputEl instanceof HTMLInputElement) inputEl.value = String(value);
+    if (valueEl) valueEl.textContent = String(value);
+  }
+  if (els.ctrlAsciiChars instanceof HTMLInputElement) {
+    els.ctrlAsciiChars.value = state.asciiFx.chars;
+  }
+}
+
+function replayAsciiSample() {
+  if (!els.ctrlAsciiSample) return;
+  els.ctrlAsciiSample.dataset.asciiFinal = els.ctrlAsciiSample.dataset.asciiFinal || 'ASCII EFFECT SAMPLE';
+  replayAsciiText(els.ctrlAsciiSample);
+}
+
+function replayAllAsciiTexts() {
+  document.querySelectorAll('.ascii-fx').forEach((el) => {
+    if (el instanceof HTMLElement) replayAsciiText(el);
+  });
+}
+
+function bindAsciiHoverReplay() {
+  const root = document.querySelector('.app-shell');
+  if (!root) return;
+
+  root.addEventListener('mouseover', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const charEl = target.closest('.ascii-fx-char');
+    if (!(charEl instanceof HTMLElement) || !root.contains(charEl)) return;
+    if (event.relatedTarget instanceof Node && charEl.contains(event.relatedTarget)) return;
+    scrambleHoveredChar(charEl);
+  });
+}
+
+function replayAsciiText(el) {
+  const finalText = el.dataset.asciiFinal ?? el.textContent ?? '';
+  const isIp = el === els.ip;
+  setAsciiText(el, finalText, {
+    force: true,
+    onFrame: isIp ? fitIpHeading : undefined,
+    onDone: isIp ? fitIpHeading : undefined
+  });
+}
+
+function setAsciiText(el, nextText, options = {}) {
+  if (!el) return;
+  const finalText = String(nextText ?? '');
+  el.dataset.asciiFinal = finalText;
+  el.classList.add('ascii-fx');
+
+  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReducedMotion) {
+    el.textContent = finalText;
+    options.onDone?.();
+    return;
+  }
+
+  if (!options.force && el.textContent === finalText) {
+    options.onDone?.();
+    return;
+  }
+
+  const prevToken = asciiRevealTokens.get(el);
+  if (prevToken) prevToken.cancelled = true;
+
+  const token = { cancelled: false };
+  asciiRevealTokens.set(el, token);
+  el.classList.add('is-scrambling');
+
+  const duration = asciiDurationForText(finalText);
+  const chars = finalText.split('');
+  const fixedMask = chars.map((ch) => /\s/.test(ch));
+  const started = performance.now();
+
+  const tick = (now) => {
+    if (token.cancelled) {
+      el.classList.remove('is-scrambling');
+      return;
+    }
+    const t = Math.min(1, (now - started) / duration);
+    const revealCount = Math.floor(chars.length * t);
+    let out = '';
+
+    for (let i = 0; i < chars.length; i += 1) {
+      if (fixedMask[i]) {
+        out += chars[i];
+      } else if (i < revealCount || t === 1) {
+        out += chars[i];
+      } else {
+        const charsPool = state.asciiFx.chars || ASCII_REVEAL_CHARS;
+        out += charsPool[Math.floor(Math.random() * charsPool.length)];
+      }
+    }
+
+    el.textContent = out;
+    options.onFrame?.();
+
+    if (t < 1) {
+      requestAnimationFrame(tick);
+      return;
+    }
+
+    renderAsciiChars(el, finalText);
+    el.classList.remove('is-scrambling');
+    options.onDone?.();
+  };
+
+  requestAnimationFrame(tick);
+}
+
+function asciiDurationForText(text) {
+  const finalText = String(text ?? '');
+  return Math.max(
+    state.asciiFx.minMs,
+    Math.min(state.asciiFx.maxMs, state.asciiFx.baseMs + finalText.length * state.asciiFx.charMs)
+  );
+}
+
+function renderAsciiChars(el, text) {
+  const chars = Array.from(String(text ?? ''));
+  const html = chars.map((char, index) => {
+    const safeChar = escapeHtml(char === ' ' ? '\u00A0' : char);
+    const delay = `${Math.min(220, index * 10)}ms`;
+    const attrChar = escapeHtml(char);
+    return `<span class="ascii-fx-char" data-ascii-char="${attrChar}" data-ascii-index="${index}" style="--char-delay:${delay}">${safeChar}</span>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+function scrambleHoveredChar(charEl) {
+  const now = performance.now();
+  const last = Number(charEl.dataset.asciiCharHoverTs || 0);
+  const charHoverCooldown = asciiCharHoverCooldownMs();
+  if (now - last < charHoverCooldown) return;
+  charEl.dataset.asciiCharHoverTs = String(now);
+
+  scrambleCharSpan(charEl, 1);
+
+  const parent = charEl.parentElement;
+  if (!parent) return;
+  const index = Number(charEl.dataset.asciiIndex);
+  if (!Number.isFinite(index)) return;
+  const prev = parent.querySelector(`.ascii-fx-char[data-ascii-index="${index - 1}"]`);
+  const next = parent.querySelector(`.ascii-fx-char[data-ascii-index="${index + 1}"]`);
+  if (prev instanceof HTMLElement) scrambleCharSpan(prev, 0.55);
+  if (next instanceof HTMLElement) scrambleCharSpan(next, 0.55);
+}
+
+function scrambleCharSpan(span, intensity = 1) {
+  const finalCharRaw = span.dataset.asciiChar ?? span.textContent ?? '';
+  const finalChar = finalCharRaw === ' ' ? ' ' : finalCharRaw;
+  if (!finalChar || /\s/.test(finalChar)) {
+    span.textContent = finalChar === ' ' ? '\u00A0' : finalChar;
+    return;
+  }
+
+  if (asciiCharHoverActive.has(span)) return;
+  asciiCharHoverActive.add(span);
+
+  const token = { cancelled: false };
+  asciiCharHoverTokens.set(span, token);
+  span.classList.add('is-char-scrambling');
+
+  const charsPool = state.asciiFx.chars || ASCII_REVEAL_CHARS;
+  const duration = asciiCharHoverDurationMs(intensity);
+  const started = performance.now();
+
+  const tick = (now) => {
+    if (token.cancelled) {
+      span.classList.remove('is-char-scrambling');
+      asciiCharHoverActive.delete(span);
+      asciiCharHoverTokens.delete(span);
+      return;
+    }
+    const t = Math.min(1, (now - started) / duration);
+    if (t >= 1) {
+      span.textContent = finalChar;
+      span.classList.remove('is-char-scrambling');
+      asciiCharHoverActive.delete(span);
+      asciiCharHoverTokens.delete(span);
+      return;
+    }
+
+    // Bias toward the final char as the animation settles.
+    const settle = t > 0.7 && Math.random() < ((t - 0.7) / 0.3);
+    span.textContent = settle ? finalChar : charsPool[Math.floor(Math.random() * charsPool.length)];
+    requestAnimationFrame(tick);
+  };
+
+  requestAnimationFrame(tick);
+}
+
+function asciiCharHoverCooldownMs() {
+  // Char hover should feel responsive, but still track the tuning control.
+  const v = Number(state.asciiFx.hoverCooldownMs) || 0;
+  if (v <= 0) return 0;
+  return Math.max(12, Math.round(v * 0.12));
+}
+
+function asciiCharHoverDurationMs(intensity = 1) {
+  const base = Math.max(1, asciiDurationForText('X'));
+  const scaledMin = Math.max(22, Math.round(state.asciiFx.minMs * 0.2));
+  const scaledMax = Math.max(scaledMin, Math.round(state.asciiFx.maxMs * 0.2));
+  const raw = base * (0.45 + intensity * 0.7);
+  return Math.max(scaledMin, Math.min(scaledMax, raw));
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function compactSummary(ipData, client) {
-  const parts = [
-    ipData.city,
-    ipData.region,
-    ipData.country_code,
-    ipData.connection?.isp,
-    client.connectionType || client.effectiveType
-  ].filter(Boolean);
-  return (parts.join(' / ') || 'NETWORK DETAILS READY').toUpperCase();
+  const place = [ipData.city, ipData.region, ipData.country].filter(Boolean).join(', ');
+  const isp = ipData.connection?.isp || ipData.connection?.org;
+  const networkHint = [client.connectionType, client.effectiveType].filter((v) => v && v !== 'N/A').join(' / ');
+
+  if (place && isp && networkHint) {
+    return `It looks like you're connecting from ${place} with ${isp} (${networkHint}).`;
+  }
+  if (place && isp) {
+    return `It looks like you're connecting from ${place} with ${isp}.`;
+  }
+  if (place) {
+    return `It looks like you're connecting from ${place}.`;
+  }
+  if (isp) {
+    return `You're online through ${isp}.`;
+  }
+  return 'Your connection details are ready.';
 }
 
 function detectNetworkRiskFlags(data) {
@@ -366,6 +989,29 @@ function collectClientData() {
   };
 }
 
+function friendlyDeviceName(client) {
+  const ua = String(client?.userAgent || '');
+  const platform = String(client?.platform || '');
+
+  if (/Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua)) {
+    if (/MacBookPro/i.test(ua)) return 'a MacBook Pro';
+    if (/MacBookAir/i.test(ua)) return 'a MacBook Air';
+    return 'a Mac';
+  }
+  if (/iPhone/i.test(ua)) return 'an iPhone';
+  if (/iPad/i.test(ua)) return 'an iPad';
+  if (/Android/i.test(ua)) return client?.mobile ? 'an Android phone' : 'an Android device';
+  if (/Windows/i.test(platform) || /Windows/i.test(ua)) return 'a Windows computer';
+  if (/Linux/i.test(platform) || /Linux/i.test(ua)) return 'a Linux machine';
+  return client?.mobile ? 'a mobile device' : 'this device';
+}
+
+function isMacDevice(client) {
+  const ua = String(client?.userAgent || '');
+  const platform = String(client?.platform || '');
+  return /Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua);
+}
+
 function matchMediaValue(q1, v1, q2, v2, fallback) {
   if (!window.matchMedia) return fallback;
   if (window.matchMedia(q1).matches) return v1;
@@ -382,6 +1028,11 @@ function yesNo(value) {
 function formatLatLon(lat, lon) {
   if (typeof lat !== 'number' || typeof lon !== 'number') return 'N/A';
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+}
+
+function inferIpType(ip) {
+  if (!ip) return undefined;
+  return String(ip).includes(':') ? 'IPv6' : 'IPv4';
 }
 
 function numberOrUndefined(value) {
@@ -472,4 +1123,14 @@ function normalizeDisplayValue(value) {
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value).toUpperCase();
+}
+
+function round1(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
+  return Math.round(value * 10) / 10;
+}
+
+function formatMbps(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
+  return value >= 100 ? String(Math.round(value)) : value.toFixed(1);
 }

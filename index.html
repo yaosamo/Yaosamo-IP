@@ -9,39 +9,93 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="hero">
-        <div class="eyebrow">PUBLIC IP ADDRESS</div>
-        <h1 id="ip-address" class="ip-value">LOADING...</h1>
-        <div id="ip-summary" class="summary-line">FETCHING NETWORK DETAILS...</div>
-        <div class="snapshot-grid" id="snapshot-grid" aria-label="Quick IP summary">
-          <div class="snapshot-card">
-            <div class="snapshot-key">COUNTRY</div>
-            <div class="snapshot-value" id="snap-country">N/A</div>
-          </div>
-          <div class="snapshot-card">
-            <div class="snapshot-key">CITY</div>
-            <div class="snapshot-value" id="snap-city">N/A</div>
-          </div>
-          <div class="snapshot-card">
-            <div class="snapshot-key">ISP</div>
-            <div class="snapshot-value" id="snap-isp">N/A</div>
-          </div>
-          <div class="snapshot-card">
-            <div class="snapshot-key">TIMEZONE</div>
-            <div class="snapshot-value" id="snap-timezone">N/A</div>
-          </div>
-          <div class="snapshot-card">
-            <div class="snapshot-key">BROWSER TZ</div>
-            <div class="snapshot-value" id="snap-browser-tz">N/A</div>
-          </div>
-          <div class="snapshot-card">
-            <div class="snapshot-key">VIEWPORT</div>
-            <div class="snapshot-value" id="snap-viewport">N/A</div>
-          </div>
-        </div>
-      </header>
-
       <section class="grid" aria-label="IP and device diagnostics">
+        <header class="hero panel wide">
+          <div class="eyebrow" id="hero-kicker">CHECKING YOUR DEVICE...</div>
+          <h1 id="ip-address" class="ip-value">LOADING...</h1>
+          <div id="ip-summary" class="summary-line">FETCHING YOUR CONNECTION DETAILS...</div>
+          <div class="snapshot-grid" id="snapshot-grid" aria-label="Quick IP summary">
+            <div class="snapshot-card">
+              <div class="snapshot-key">COUNTRY</div>
+              <div class="snapshot-value" id="snap-country">N/A</div>
+            </div>
+            <div class="snapshot-card">
+              <div class="snapshot-key">CITY</div>
+              <div class="snapshot-value" id="snap-city">N/A</div>
+            </div>
+            <div class="snapshot-card">
+              <div class="snapshot-key">ISP</div>
+              <div class="snapshot-value" id="snap-isp">N/A</div>
+            </div>
+            <div class="snapshot-card">
+              <div class="snapshot-key">TIMEZONE</div>
+              <div class="snapshot-value" id="snap-timezone">N/A</div>
+            </div>
+            <div class="snapshot-card">
+              <div class="snapshot-key">BROWSER TZ</div>
+              <div class="snapshot-value" id="snap-browser-tz">N/A</div>
+            </div>
+            <div class="snapshot-card">
+              <div class="snapshot-key">VIEWPORT</div>
+              <div class="snapshot-value" id="snap-viewport">N/A</div>
+            </div>
+          </div>
+        </header>
+
+        <section class="panel wide is-test-hidden" id="panel-ascii-controls-test">
+          <div class="panel-head">
+            <h2>ANIMATION CONTROLS (TEST)</h2>
+            <div class="panel-head-actions">
+              <button id="ctrl-replay-all" class="speed-btn" type="button">REPLAY ALL</button>
+              <button id="ctrl-reset-ascii" class="speed-btn" type="button">RESET</button>
+            </div>
+          </div>
+          <div class="rows">
+            <div class="row">
+              <div class="key">BASE DURATION (MS)</div>
+              <div class="value control-cell">
+                <input id="ctrl-base-ms" type="range" min="0" max="2200" step="5" value="900" />
+                <span id="ctrl-base-ms-value">900</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="key">PER CHAR (MS)</div>
+              <div class="value control-cell">
+                <input id="ctrl-char-ms" type="range" min="0" max="300" step="1" value="150" />
+                <span id="ctrl-char-ms-value">150</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="key">MIN DURATION (MS)</div>
+              <div class="value control-cell">
+                <input id="ctrl-min-ms" type="range" min="40" max="2200" step="5" value="500" />
+                <span id="ctrl-min-ms-value">500</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="key">MAX DURATION (MS)</div>
+              <div class="value control-cell">
+                <input id="ctrl-max-ms" type="range" min="160" max="9000" step="10" value="3000" />
+                <span id="ctrl-max-ms-value">3000</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="key">HOVER COOLDOWN (MS)</div>
+              <div class="value control-cell">
+                <input id="ctrl-hover-cooldown" type="range" min="0" max="5000" step="10" value="3000" />
+                <span id="ctrl-hover-cooldown-value">3000</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="key">ASCII CHARSET</div>
+              <div class="value control-cell control-cell--stack">
+                <input id="ctrl-ascii-chars" type="text" value="01#*+=-[]{}<>/\\|:;.^~_xX" />
+                <div id="ctrl-ascii-sample" class="control-sample ascii-fx">ASCII EFFECT SAMPLE</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" id="panel-network">
           <div class="panel-head">
             <h2>NETWORK</h2>
@@ -72,6 +126,17 @@
             <div class="panel-count" id="device-count">0 FIELDS</div>
           </div>
           <div class="rows" id="device-rows"></div>
+        </section>
+
+        <section class="panel wide" id="panel-speed">
+          <div class="panel-head">
+            <h2>SPEED TEST</h2>
+            <div class="panel-head-actions">
+              <div class="panel-count" id="speed-count">0 FIELDS</div>
+              <button id="run-speed-test" class="speed-btn" type="button">RUN TEST</button>
+            </div>
+          </div>
+          <div class="rows" id="speed-rows"></div>
         </section>
 
         <section class="panel wide" id="panel-raw">
