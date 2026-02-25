@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WHAT IS MY IP</title>
+    <link rel="stylesheet" href="https://departuremono.com/assets/index-DP1RCVYQ.css" />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div class="eyebrow">PUBLIC IP ADDRESS</div>
+        <h1 id="ip-address" class="ip-value">LOADING...</h1>
+        <div id="ip-summary" class="summary-line">FETCHING NETWORK DETAILS...</div>
+      </header>
+
+      <section class="grid" aria-label="IP and device diagnostics">
+        <section class="panel" id="panel-network">
+          <h2>NETWORK</h2>
+          <div class="rows" id="network-rows"></div>
+        </section>
+
+        <section class="panel" id="panel-geo">
+          <h2>GEO / TIME</h2>
+          <div class="rows" id="geo-rows"></div>
+        </section>
+
+        <section class="panel" id="panel-browser">
+          <h2>BROWSER</h2>
+          <div class="rows" id="browser-rows"></div>
+        </section>
+
+        <section class="panel" id="panel-device">
+          <h2>DEVICE / SCREEN</h2>
+          <div class="rows" id="device-rows"></div>
+        </section>
+
+        <section class="panel wide" id="panel-raw">
+          <h2>RAW JSON</h2>
+          <pre id="raw-json" class="raw-json">{}</pre>
+        </section>
+      </section>
+    </main>
+
+    <template id="row-template">
+      <div class="row">
+        <div class="key"></div>
+        <div class="value"></div>
+      </div>
+    </template>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
