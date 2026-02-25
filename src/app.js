@@ -11,22 +11,17 @@ const els = {
   geoCount: document.getElementById('geo-count'),
   browserCount: document.getElementById('browser-count'),
   deviceCount: document.getElementById('device-count'),
-  speedCount: document.getElementById('speed-count'),
   networkRows: document.getElementById('network-rows'),
   geoRows: document.getElementById('geo-rows'),
   browserRows: document.getElementById('browser-rows'),
   deviceRows: document.getElementById('device-rows'),
-  speedRows: document.getElementById('speed-rows'),
-  speedStatus: document.getElementById('speed-status'),
-  runSpeedTest: document.getElementById('run-speed-test'),
   rawJson: document.getElementById('raw-json'),
   rowTemplate: document.getElementById('row-template')
 };
 
 const state = {
   ipApi: null,
-  client: null,
-  speedTest: null
+  client: null
 };
 
 const FIELD_TOOLTIPS = {
@@ -78,17 +73,7 @@ const FIELD_TOOLTIPS = {
   WEBDRIVER: 'TRUE CAN INDICATE AUTOMATION / WEBDRIVER-CONTROLLED BROWSER.',
   'MAX TOUCH POINTS': 'MAXIMUM TOUCH CONTACTS SUPPORTED BY THE DEVICE.',
   'SECURE CONTEXT': 'WHETHER THE PAGE IS RUNNING IN HTTPS/LOCALHOST SECURE CONTEXT.',
-  REFERRER: 'PAGE URL THAT REFERRED THE USER HERE (IF ANY).',
-  'TEST STATUS': 'CURRENT OR LAST SPEED TEST STATUS.',
-  'MEASURED PING (MS)': 'MEDIAN LATENCY MEASURED USING MULTIPLE SMALL FETCH REQUESTS.',
-  'MEASURED DOWNLOAD (MBPS)': 'ESTIMATED DOWNLOAD THROUGHPUT FROM A TEST FILE FETCH.',
-  'TRANSFER BYTES': 'NUMBER OF BYTES DOWNLOADED DURING THE SPEED TEST.',
-  'TRANSFER TIME (MS)': 'TIME SPENT DOWNLOADING THE TEST PAYLOAD.',
-  'TOTAL TEST TIME (MS)': 'FULL SPEED TEST DURATION INCLUDING LATENCY CHECKS.',
-  'EST DOWNLINK (MBPS)': 'BROWSER-REPORTED BANDWIDTH ESTIMATE (NOT MEASURED).',
-  'EST RTT (MS)': 'BROWSER-REPORTED LATENCY ESTIMATE (NOT MEASURED).',
-  SERVER: 'SERVER USED FOR THE SPEED TEST REQUESTS.',
-  'TESTED AT': 'TIMESTAMP WHEN THE LAST SPEED TEST FINISHED.'
+  REFERRER: 'PAGE URL THAT REFERRED THE USER HERE (IF ANY).'
 };
 
 const SNAPSHOT_TOOLTIPS = {
@@ -107,8 +92,6 @@ async function init() {
   const client = collectClientData();
   state.client = client;
   renderClientSections(client);
-  renderSpeedPanel(client, null);
-  bindSpeedTest();
 
   try {
     const ipData = await fetchIpData();
@@ -123,11 +106,64 @@ async function init() {
 }
 
 async function fetchIpData() {
-  const res = await fetch('https://ipwho.is/', { headers: { accept: 'application/json' } });
-  if (!res.ok) throw new Error(`IP API HTTP ${res.status}`);
-  const data = await res.json();
-  if (data && data.success === false) throw new Error(data.message || 'IP API FAILED');
-  return data;
+  const attempts = [];
+
+  try {
+    const res = await fetch('https://ipwho.is/', { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`IPWHO.IS HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.success === false) throw new Error(data.message || 'IPWHO.IS FAILED');
+    return data;
+  } catch (error) {
+    attempts.push(String(error?.message || error));
+  }
+
+  try {
+    const res = await fetch('https://ipapi.co/json/', { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`IPAPI.CO HTTP ${res.status}`);
+    const data = await res.json();
+    if (data?.error) throw new Error(data.reason || data.message || 'IPAPI.CO FAILED');
+    return normalizeIpApiCo(data);
+  } catch (error) {
+    attempts.push(String(error?.message || error));
+  }
+
+  throw new Error(`IP LOOKUP FAILED / ${attempts.join(' / ')}`);
+}
+
+function normalizeIpApiCo(data) {
+  const tzId = data.timezone;
+  const utc = formatIpApiUtcOffset(data.utc_offset);
+
+  return {
+    ip: data.ip,
+    type: data.version ? `IPv${data.version}` : undefined,
+    country: data.country_name || data.country,
+    country_code: data.country_code,
+    region: data.region,
+    city: data.city,
+    postal: data.postal,
+    latitude: numberOrUndefined(data.latitude),
+    longitude: numberOrUndefined(data.longitude),
+    connection: {
+      isp: data.org,
+      org: data.org,
+      asn: data.asn,
+      domain: undefined,
+      hostname: undefined
+    },
+    flag: {
+      emoji: countryCodeToFlagEmoji(data.country_code)
+    },
+    timezone: {
+      id: tzId,
+      abbr: undefined,
+      utc,
+      current_time: tzId ? currentTimeForZone(tzId) : undefined,
+      is_dst: tzId ? isDstNowInZone(tzId) : undefined
+    },
+    security: undefined
+  };
 }
 
 function renderIpData(ipData, client) {
@@ -204,108 +240,11 @@ function renderClientSections(client) {
   ], els.deviceCount);
 }
 
-function renderSpeedPanel(client, result) {
-  const entries = [
-    ['TEST STATUS', result?.status || 'READY'],
-    ['MEASURED PING (MS)', result?.latencyMs],
-    ['MEASURED DOWNLOAD (MBPS)', result?.downloadMbps],
-    ['TRANSFER BYTES', result?.bytes],
-    ['TRANSFER TIME (MS)', result?.downloadMs],
-    ['TOTAL TEST TIME (MS)', result?.totalMs],
-    ['EST DOWNLINK (MBPS)', client?.downlink],
-    ['EST RTT (MS)', client?.rtt],
-    ['EFFECTIVE TYPE', client?.effectiveType],
-    ['CONNECTION TYPE', client?.connectionType],
-    ['SERVER', result?.server || 'CLOUDFLARE SPEED'],
-    ['TESTED AT', result?.testedAt]
-  ];
-
-  renderRows(els.speedRows, entries, els.speedCount);
-  if (els.speedStatus) {
-    els.speedStatus.textContent = normalizeDisplayValue(result?.statusLabel || result?.status || 'READY');
-  }
-}
-
-function bindSpeedTest() {
-  if (!els.runSpeedTest) return;
-  els.runSpeedTest.addEventListener('click', async () => {
-    if (els.runSpeedTest.disabled) return;
-    els.runSpeedTest.disabled = true;
-    if (els.speedStatus) els.speedStatus.textContent = 'RUNNING...';
-    renderSpeedPanel(state.client, { status: 'RUNNING', statusLabel: 'RUNNING TEST...' });
-    try {
-      const result = await runSpeedTest();
-      state.speedTest = result;
-      renderSpeedPanel(state.client, result);
-      renderRawJson();
-    } catch (error) {
-      state.speedTest = {
-        status: 'FAILED',
-        statusLabel: `TEST FAILED: ${String(error?.message || error)}`,
-        error: String(error?.message || error),
-        testedAt: new Date().toISOString()
-      };
-      renderSpeedPanel(state.client, state.speedTest);
-      renderRawJson();
-    } finally {
-      els.runSpeedTest.disabled = false;
-    }
-  });
-}
-
-async function runSpeedTest() {
-  const started = performance.now();
-  const latencyMs = await measureLatencyMs();
-  const download = await measureDownloadMbps();
-  const totalMs = Math.round(performance.now() - started);
-  return {
-    status: 'COMPLETED',
-    statusLabel: `DONE / ${formatMbps(download.mbps)} MBPS`,
-    latencyMs: round1(latencyMs),
-    downloadMbps: formatMbps(download.mbps),
-    bytes: download.bytes,
-    downloadMs: Math.round(download.ms),
-    totalMs,
-    server: 'SPEED.CLOUDFLARE.COM',
-    testedAt: new Date().toISOString()
-  };
-}
-
-async function measureLatencyMs() {
-  const attempts = [];
-  for (let i = 0; i < 3; i += 1) {
-    const t0 = performance.now();
-    const res = await fetch(`https://www.cloudflare.com/cdn-cgi/trace?ts=${Date.now()}-${i}`, {
-      cache: 'no-store',
-      mode: 'cors'
-    });
-    if (!res.ok) throw new Error(`LATENCY HTTP ${res.status}`);
-    await res.text();
-    attempts.push(performance.now() - t0);
-  }
-  attempts.sort((a, b) => a - b);
-  return attempts[Math.floor(attempts.length / 2)];
-}
-
-async function measureDownloadMbps() {
-  const bytes = 5_000_000;
-  const url = `https://speed.cloudflare.com/__down?bytes=${bytes}&nocache=${Date.now()}`;
-  const t0 = performance.now();
-  const res = await fetch(url, { cache: 'no-store', mode: 'cors' });
-  if (!res.ok) throw new Error(`DOWNLOAD HTTP ${res.status}`);
-  const blob = await res.blob();
-  const ms = performance.now() - t0;
-  const measuredBytes = blob.size || bytes;
-  const mbps = (measuredBytes * 8) / (ms / 1000) / 1_000_000;
-  return { bytes: measuredBytes, ms, mbps };
-}
-
 function renderRawJson(extra = {}) {
   els.rawJson.textContent = JSON.stringify({
     ...extra,
     ipApi: state.ipApi,
-    client: state.client,
-    speedTest: state.speedTest
+    client: state.client
   }, null, 2);
 }
 
@@ -339,9 +278,6 @@ function applyStaticTooltips() {
     }
   }
 
-  if (els.runSpeedTest) {
-    els.runSpeedTest.title = 'RUNS A LIGHTWEIGHT BROWSER SPEED TEST (PING + DOWNLOAD).';
-  }
 }
 
 function applyFieldTooltip(el, key) {
@@ -448,20 +384,92 @@ function formatLatLon(lat, lon) {
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 }
 
+function numberOrUndefined(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function formatIpApiUtcOffset(value) {
+  if (!value && value !== 0) return undefined;
+  const str = String(value).trim();
+  if (!str) return undefined;
+  if (/^[+-]\d{2}:?\d{2}$/.test(str)) {
+    return str.includes(':') ? str : `${str.slice(0, 3)}:${str.slice(3)}`;
+  }
+  return str;
+}
+
+function countryCodeToFlagEmoji(code) {
+  if (!code || String(code).length !== 2) return undefined;
+  const cc = String(code).toUpperCase();
+  const base = 127397;
+  try {
+    return String.fromCodePoint(...cc.split('').map((char) => base + char.charCodeAt(0)));
+  } catch {
+    return undefined;
+  }
+}
+
+function currentTimeForZone(timeZone) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date());
+  } catch {
+    return undefined;
+  }
+}
+
+function isDstNowInZone(timeZone) {
+  try {
+    const now = new Date();
+    const jan = new Date(now.getFullYear(), 0, 1);
+    const jul = new Date(now.getFullYear(), 6, 1);
+    const nowOffset = zonedOffsetMinutes(now, timeZone);
+    const janOffset = zonedOffsetMinutes(jan, timeZone);
+    const julOffset = zonedOffsetMinutes(jul, timeZone);
+    const baseline = Math.max(janOffset, julOffset);
+    return nowOffset < baseline;
+  } catch {
+    return undefined;
+  }
+}
+
+function zonedOffsetMinutes(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second)
+  );
+  return (asUtc - date.getTime()) / 60000;
+}
+
 function normalizeDisplayValue(value) {
   if (value === null || value === undefined || value === '') return 'N/A';
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value).toUpperCase();
-}
-
-function round1(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
-  return Math.round(value * 10) / 10;
-}
-
-function formatMbps(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
-  return value >= 100 ? String(Math.round(value)) : value.toFixed(1);
 }

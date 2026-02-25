@@ -14,9 +14,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  background: radial-gradient(circle at 15% 10%, #1a1d25 0%, rgba(26, 29, 37, 0) 40%),
-    radial-gradient(circle at 90% 10%, rgba(110, 231, 183, 0.12) 0%, rgba(110, 231, 183, 0) 28%),
-    var(--bg);
+  background: var(--panel-2);
   color: var(--ink);
   font-family: "Departure Mono", ui-monospace, monospace;
   text-transform: uppercase;
@@ -67,7 +65,7 @@ body {
 .snapshot-grid {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -102,7 +100,7 @@ body {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -141,50 +139,6 @@ body {
 .panel.wide {
   grid-column: 1 / -1;
   min-height: 260px;
-}
-
-.speed-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.speed-btn {
-  appearance: none;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  color: var(--ink);
-  border-radius: 9px;
-  font: inherit;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: background-color 80ms ease-out, border-color 80ms ease-out, opacity 80ms ease-out, transform 60ms ease-out;
-}
-
-.speed-btn:hover:not(:disabled) {
-  border-color: rgba(255,255,255,0.28);
-  background: linear-gradient(180deg, rgba(255,255,255,0.11), rgba(255,255,255,0.04));
-}
-
-.speed-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.speed-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.speed-status {
-  color: rgba(255,255,255,0.56);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-align: right;
 }
 
 .rows {
@@ -249,11 +203,9 @@ body {
 
 @media (max-width: 860px) {
   body { padding: 12px; }
-  .snapshot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .snapshot-grid { grid-template-columns: 1fr; }
   .grid { grid-template-columns: 1fr; }
   .panel.wide { grid-column: auto; }
-  .speed-toolbar { align-items: flex-start; flex-direction: column; }
-  .speed-status { text-align: left; }
   .row { grid-template-columns: 1fr; gap: 2px; padding: 6px 0; }
   .key { font-size: 9px; }
 }
