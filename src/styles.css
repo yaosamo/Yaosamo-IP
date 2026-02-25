@@ -1,3 +1,13 @@
+@font-face {
+  font-family: "Departure Mono";
+  src:
+    url("../public/fonts/DepartureMono-Regular.woff2") format("woff2"),
+    url("../public/fonts/DepartureMono-Regular.woff") format("woff");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   --bg: #090a0c;
   --panel: #101217;
