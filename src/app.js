@@ -54,6 +54,7 @@ const state = {
 
 const ASCII_REVEAL_CHARS = '01#*+=-[]{}<>/\\\\|:;.^~_xX';
 const ASCII_TUNING_DEFAULTS = Object.freeze({ ...state.asciiFx });
+const ASCII_TUNING_STORAGE_KEY = 'whatismyip.asciiFx.v1';
 const asciiRevealTokens = new WeakMap();
 const asciiCharHoverTokens = new WeakMap();
 const asciiCharHoverActive = new WeakSet();
@@ -132,6 +133,7 @@ const SNAPSHOT_TOOLTIPS = {
 init();
 
 async function init() {
+  loadAsciiTuningFromStorage();
   applyStaticTooltips();
   bindAsciiControlsVisibilityToggle();
   bindAsciiTestControls();
@@ -171,6 +173,38 @@ async function init() {
       setAsciiText(els.summary, "I couldn't read your public IP details right now.");
     }
     renderRawJson({ error: String(error) });
+  }
+}
+
+function loadAsciiTuningFromStorage() {
+  try {
+    const raw = window.localStorage?.getItem(ASCII_TUNING_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+
+    const next = { ...state.asciiFx };
+    const numericKeys = ['baseMs', 'charMs', 'minMs', 'maxMs', 'hoverCooldownMs'];
+    for (const key of numericKeys) {
+      const n = Number(parsed[key]);
+      if (Number.isFinite(n)) next[key] = n;
+    }
+    if (typeof parsed.chars === 'string' && parsed.chars.length) {
+      next.chars = parsed.chars;
+    }
+
+    state.asciiFx = next;
+    normalizeAsciiTuningRanges();
+  } catch {
+    // Ignore malformed local data.
+  }
+}
+
+function saveAsciiTuningToStorage() {
+  try {
+    window.localStorage?.setItem(ASCII_TUNING_STORAGE_KEY, JSON.stringify(state.asciiFx));
+  } catch {
+    // Ignore storage quota/private mode errors.
   }
 }
 
@@ -676,6 +710,7 @@ function bindAsciiTestControls() {
       state.asciiFx[key] = Number(inputEl.value);
       normalizeAsciiTuningRanges();
       valueEl.textContent = String(state.asciiFx[key]);
+      saveAsciiTuningToStorage();
     };
     inputEl.value = String(state.asciiFx[key]);
     sync();
@@ -686,6 +721,7 @@ function bindAsciiTestControls() {
     els.ctrlAsciiChars.value = state.asciiFx.chars;
     els.ctrlAsciiChars.addEventListener('input', () => {
       state.asciiFx.chars = els.ctrlAsciiChars.value || ASCII_REVEAL_CHARS;
+      saveAsciiTuningToStorage();
       replayAsciiSample();
     });
   }
@@ -698,6 +734,7 @@ function bindAsciiTestControls() {
     els.ctrlResetAscii.addEventListener('click', () => {
       state.asciiFx = { ...ASCII_TUNING_DEFAULTS };
       applyAsciiControlStateToInputs();
+      saveAsciiTuningToStorage();
       replayAsciiSample();
       replayAllAsciiTexts();
     });
