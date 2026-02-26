@@ -471,7 +471,10 @@ body {
     flex: 1 1 auto;
     width: 100%;
   }
-  .speed-btn { width: 100%; }
+  .speed-btn {
+    width: 50%;
+    min-width: 112px;
+  }
   .panel h2 { font-size: 10px; }
   .eyebrow { font-size: 9px; }
 }
