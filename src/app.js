@@ -1006,14 +1006,19 @@ function collectClientData() {
 function friendlyDeviceName(client) {
   const ua = String(client?.userAgent || '');
   const platform = String(client?.platform || '');
+  const maxTouchPoints = Number(client?.maxTouchPoints || 0);
 
-  if (/Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua)) {
+  // iOS user agents include "like Mac OS X", so detect Apple mobile first.
+  if (/iPhone/i.test(ua)) return 'an iPhone';
+  if (/iPad/i.test(ua)) return 'an iPad';
+  if (/iPod/i.test(ua)) return 'an iPod touch';
+  if (/Mac/i.test(platform) && maxTouchPoints > 1) return 'an iPad';
+
+  if (/Mac/i.test(platform) || /Macintosh/i.test(ua)) {
     if (/MacBookPro/i.test(ua)) return 'a MacBook Pro';
     if (/MacBookAir/i.test(ua)) return 'a MacBook Air';
     return 'a Mac';
   }
-  if (/iPhone/i.test(ua)) return 'an iPhone';
-  if (/iPad/i.test(ua)) return 'an iPad';
   if (/Android/i.test(ua)) return client?.mobile ? 'an Android phone' : 'an Android device';
   if (/Windows/i.test(platform) || /Windows/i.test(ua)) return 'a Windows computer';
   if (/Linux/i.test(platform) || /Linux/i.test(ua)) return 'a Linux machine';
@@ -1023,7 +1028,13 @@ function friendlyDeviceName(client) {
 function isMacDevice(client) {
   const ua = String(client?.userAgent || '');
   const platform = String(client?.platform || '');
-  return /Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua);
+  const maxTouchPoints = Number(client?.maxTouchPoints || 0);
+
+  if (/iPhone|iPad|iPod/i.test(ua)) return false;
+  // iPadOS desktop mode often reports MacIntel platform with touch points > 1.
+  if (/Mac/i.test(platform) && maxTouchPoints > 1) return false;
+
+  return /Mac/i.test(platform) || /Macintosh/i.test(ua);
 }
 
 function matchMediaValue(q1, v1, q2, v2, fallback) {
