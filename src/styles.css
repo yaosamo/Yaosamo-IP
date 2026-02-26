@@ -93,6 +93,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.14em;
   margin-bottom: 8px;
+  white-space: pre-line;
 }
 
 .ascii-fx {

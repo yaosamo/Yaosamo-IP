@@ -383,11 +383,16 @@ function renderIpData(ipData, client) {
 
 function renderHeroCopy(client) {
   if (!els.heroKicker) return;
+  const isMobile = !!client?.mobile;
   if (isMacDevice(client)) {
     setAsciiText(els.heroKicker, 'NICE LOOKING MAC! YOUR IP ADDRESS IS');
     return;
   }
   const device = friendlyDeviceName(client);
+  if (isMobile) {
+    setAsciiText(els.heroKicker, `YOU'RE USING ${device.toUpperCase()}.\nYOUR IP ADDRESS IS`);
+    return;
+  }
   setAsciiText(els.heroKicker, `YOU'RE USING ${device.toUpperCase()}. GREAT CHOICE. YOUR IP ADDRESS IS`);
 }
 
@@ -839,6 +844,7 @@ function asciiDurationForText(text) {
 function renderAsciiChars(el, text) {
   const chars = Array.from(String(text ?? ''));
   const html = chars.map((char, index) => {
+    if (char === '\n') return '<br>';
     const safeChar = escapeHtml(char === ' ' ? '\u00A0' : char);
     const delay = `${Math.min(220, index * 10)}ms`;
     const attrChar = escapeHtml(char);
