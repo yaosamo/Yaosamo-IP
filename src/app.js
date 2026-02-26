@@ -484,10 +484,19 @@ function renderSpeedPanel(client, result) {
 }
 
 function bindSpeedTest() {
-  if (!els.runSpeedTest) return;
-  els.runSpeedTest.addEventListener('click', async () => {
-    if (els.runSpeedTest.disabled) return;
-    els.runSpeedTest.disabled = true;
+  const speedButtons = Array.from(document.querySelectorAll('[data-run-speed-test]'));
+  if (!speedButtons.length) return;
+
+  let isRunning = false;
+
+  const setButtonsDisabled = (disabled) => {
+    for (const button of speedButtons) button.disabled = disabled;
+  };
+
+  const handleRun = async () => {
+    if (isRunning) return;
+    isRunning = true;
+    setButtonsDisabled(true);
     renderSpeedPanel(state.client, { status: 'RUNNING', statusLabel: 'RUNNING TEST...' });
 
     try {
@@ -505,9 +514,14 @@ function bindSpeedTest() {
       renderSpeedPanel(state.client, state.speedTest);
       renderRawJson();
     } finally {
-      els.runSpeedTest.disabled = false;
+      setButtonsDisabled(false);
+      isRunning = false;
     }
-  });
+  };
+
+  for (const button of speedButtons) {
+    button.addEventListener('click', handleRun);
+  }
 }
 
 async function runSpeedTest() {
@@ -599,8 +613,8 @@ function applyStaticTooltips() {
       keyEl.setAttribute('aria-label', `${keyEl.textContent}: ${text}`);
     }
   }
-  if (els.runSpeedTest) {
-    els.runSpeedTest.title = 'RUNS A LIGHTWEIGHT BROWSER SPEED TEST (PING + DOWNLOAD).';
+  for (const button of document.querySelectorAll('[data-run-speed-test]')) {
+    button.title = 'RUNS A LIGHTWEIGHT BROWSER SPEED TEST (PING + DOWNLOAD).';
   }
 }
 

@@ -200,6 +200,7 @@ body {
   color: rgb(0 0 0 / 90%);
   padding: 0.3em;
   background-color: #e3d525;
+  border-radius: 4px;
   max-width: 100%;
 }
 
