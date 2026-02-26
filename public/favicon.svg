@@ -1,12 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f3f5f8" />
-      <stop offset="100%" stop-color="#cfd5de" />
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="12" fill="#16181c" />
-  <rect x="6" y="6" width="52" height="52" rx="9" fill="none" stroke="url(#g)" stroke-width="2" opacity="0.7" />
-  <path d="M17 22h6v20h-6zM27 22h6v8h10v-8h6v20h-6v-6H33v6h-6z" fill="#eef2f7" />
-  <circle cx="49" cy="17" r="3" fill="#8ff0a4" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+  <rect width="64" height="64" fill="#090a0c" />
+  <rect x="4" y="4" width="56" height="56" fill="#222222" />
+  <rect x="4" y="4" width="56" height="4" fill="#f2f4f7" opacity="0.18" />
+  <rect x="4" y="56" width="56" height="4" fill="#f2f4f7" opacity="0.1" />
+  <rect x="4" y="8" width="4" height="48" fill="#f2f4f7" opacity="0.18" />
+  <rect x="56" y="8" width="4" height="48" fill="#f2f4f7" opacity="0.1" />
+  <rect x="8" y="10" width="48" height="2" fill="#f2f4f7" opacity="0.06" />
+
+  <!-- Bitmap-font style "IP" (4px grid cells) -->
+  <g fill="#f2f4f7">
+    <!-- I: 3x5 bitmap -->
+    <rect x="14" y="18" width="12" height="4" />
+    <rect x="18" y="22" width="4" height="4" />
+    <rect x="18" y="26" width="4" height="4" />
+    <rect x="18" y="30" width="4" height="4" />
+    <rect x="14" y="34" width="12" height="4" />
+
+    <!-- P: 3x5 bitmap -->
+    <rect x="34" y="18" width="4" height="20" />
+    <rect x="38" y="18" width="8" height="4" />
+    <rect x="46" y="22" width="4" height="4" />
+    <rect x="38" y="26" width="8" height="4" />
+    <rect x="46" y="30" width="4" height="4" />
+    <rect x="38" y="34" width="8" height="4" />
+  </g>
+
+  <rect x="48" y="10" width="4" height="4" fill="#6ee7b7" />
 </svg>
