@@ -69,6 +69,16 @@ body {
   background: transparent;
 }
 
+.app-shell,
+.grid,
+.grid > *,
+.panel,
+.panel-head,
+.rows,
+.row {
+  min-width: 0;
+}
+
 .hero {
   border: 1px solid var(--line);
   background: linear-gradient(180deg, var(--panel-grad-top), rgba(255, 255, 255, 0)), var(--panel-fill);
@@ -180,6 +190,7 @@ body {
   padding: 12px;
   min-height: 180px;
   width: 100%;
+  overflow: hidden;
 }
 
 .panel h2 {
@@ -189,6 +200,7 @@ body {
   color: rgb(0 0 0 / 90%);
   padding: 0.3em;
   background-color: #e3d525;
+  max-width: 100%;
 }
 
 .panel-head {
@@ -206,13 +218,16 @@ body {
   color: var(--count);
   font-size: 9px;
   letter-spacing: 0.12em;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .panel-head-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .panel.wide {
@@ -358,6 +373,7 @@ body {
   color: var(--value-faint);
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   width: 100%;
   max-height: 520px;
   overflow: auto;
@@ -420,6 +436,15 @@ body {
     flex-wrap: wrap;
     gap: 6px 8px;
     margin-bottom: 8px;
+  }
+  .panel h2 {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+  .panel-count {
+    font-size: 8px;
+    letter-spacing: 0.08em;
+    text-align: left;
   }
   .panel-head-actions {
     width: 100%;
