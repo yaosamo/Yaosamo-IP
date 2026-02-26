@@ -1,3 +1,12 @@
+import {
+  ASCII_REVEAL_CHARS,
+  ASCII_TUNING_STORAGE_KEY,
+  DEFAULT_ASCII_TUNING,
+  FIELD_TOOLTIPS,
+  SNAPSHOT_TOOLTIPS
+} from './app-constants.js';
+import { fetchIpData, fetchPublicIpOnly, normalizeIpOnly } from './ip-services.js';
+
 const els = {
   heroKicker: document.getElementById('hero-kicker'),
   ip: document.getElementById('ip-address'),
@@ -42,93 +51,13 @@ const state = {
   ipApi: null,
   client: null,
   speedTest: null,
-  asciiFx: {
-    baseMs: 900,
-    charMs: 150,
-    minMs: 500,
-    maxMs: 3000,
-    hoverCooldownMs: 3000,
-    chars: '01#*+=-[]{}<>/\\\\|:;.^~_xX'
-  }
+  asciiFx: { ...DEFAULT_ASCII_TUNING }
 };
 
-const ASCII_REVEAL_CHARS = '01#*+=-[]{}<>/\\\\|:;.^~_xX';
-const ASCII_TUNING_DEFAULTS = Object.freeze({ ...state.asciiFx });
-const ASCII_TUNING_STORAGE_KEY = 'whatismyip.asciiFx.v1';
+const ASCII_TUNING_DEFAULTS = DEFAULT_ASCII_TUNING;
 const asciiRevealTokens = new WeakMap();
 const asciiCharHoverTokens = new WeakMap();
 const asciiCharHoverActive = new WeakSet();
-
-const FIELD_TOOLTIPS = {
-  IP: 'YOUR PUBLIC INTERNET ADDRESS AS SEEN BY THE LOOKUP SERVICE.',
-  TYPE: 'IP VERSION / TYPE (SUCH AS IPV4 OR IPV6).',
-  ISP: 'YOUR INTERNET SERVICE PROVIDER.',
-  ORG: 'ORGANIZATION NAME ASSOCIATED WITH THE IP BLOCK.',
-  ASN: 'AUTONOMOUS SYSTEM NUMBER THAT ANNOUNCES THIS IP ROUTE.',
-  DOMAIN: 'PRIMARY DOMAIN ASSOCIATED WITH THE NETWORK PROVIDER.',
-  HOSTNAME: 'REVERSE DNS HOSTNAME FOR THIS IP (IF AVAILABLE).',
-  ROUTEABLE: 'WHETHER THE ADDRESS LOOKS LIKE A PUBLIC ROUTEABLE INTERNET IP.',
-  'VPN/PROXY/TOR FLAG': 'DETECTED PRIVACY/RELAY NETWORK FLAGS REPORTED BY THE GEO IP SERVICE.',
-  'COUNTRY CODE': 'ISO COUNTRY CODE FOR THE DETECTED LOCATION.',
-  REGION: 'STATE / PROVINCE / REGION REPORTED FOR THE IP.',
-  POSTAL: 'POSTAL OR ZIP CODE ESTIMATE FOR THE IP GEO LOCATION.',
-  'LAT/LON': 'APPROXIMATE GEOLOCATION COORDINATES FOR THE IP.',
-  TIMEZONE: 'IANA TIME ZONE ID (FOR EXAMPLE AMERICA/NEW_YORK).',
-  'TIMEZONE ABBR': 'SHORT TIME ZONE ABBREVIATION (CAN BE AMBIGUOUS GLOBALLY).',
-  'UTC OFFSET': 'CURRENT UTC OFFSET FOR THE DETECTED TIME ZONE.',
-  'LOCAL TIME': 'CURRENT LOCAL TIME IN THE DETECTED GEO IP TIME ZONE.',
-  DST: 'DAYLIGHT SAVING TIME STATUS IN THE DETECTED TIME ZONE.',
-  'COUNTRY FLAG': 'UNICODE / EMOJI FLAG FOR THE DETECTED COUNTRY.',
-  'USER AGENT': 'FULL BROWSER USER-AGENT STRING SENT BY THE CLIENT.',
-  LANGUAGES: 'PREFERRED BROWSER LANGUAGES IN ORDER.',
-  PLATFORM: 'LEGACY BROWSER PLATFORM STRING.',
-  MOBILE: 'BEST-EFFORT DETECTION OF MOBILE DEVICE FROM UA / UA-CH.',
-  'TOUCH POINTS': 'NUMBER OF SIMULTANEOUS TOUCH CONTACTS SUPPORTED.',
-  ONLINE: 'BROWSER ONLINE FLAG (NOT A GUARANTEE OF INTERNET REACHABILITY).',
-  'COOKIES ENABLED': 'WHETHER COOKIES ARE ENABLED IN THE BROWSER.',
-  'DO NOT TRACK': 'LEGACY DNT PRIVACY PREFERENCE HEADER/SIGNAL.',
-  LOCALE: 'BROWSER / SYSTEM LOCALE USED FOR FORMATTERS.',
-  'COLOR SCHEME': 'SYSTEM COLOR SCHEME PREFERENCE EXPOSED TO THE BROWSER.',
-  'REDUCED MOTION': 'ACCESSIBILITY MOTION PREFERENCE FROM THE OS/BROWSER.',
-  'CONNECTION TYPE': 'NETWORK TYPE HINT FROM NAVIGATOR.CONNECTION (WHEN SUPPORTED).',
-  'EFFECTIVE TYPE': 'ESTIMATED CONNECTION QUALITY (E.G. 4G, 3G) FROM THE BROWSER.',
-  'DOWNLINK MBPS': 'ESTIMATED DOWNLOAD BANDWIDTH (NOT A REAL SPEED TEST).',
-  'RTT MS': 'ESTIMATED ROUND-TRIP LATENCY IN MILLISECONDS FROM THE BROWSER.',
-  'SAVE DATA': 'USER PREFERENCE TO REDUCE DATA USAGE.',
-  'SCREEN PX': 'TOTAL SCREEN RESOLUTION IN CSS PIXELS.',
-  'VIEWPORT PX': 'CURRENT BROWSER VIEWPORT SIZE IN CSS PIXELS.',
-  'AVAILABLE SCREEN': 'SCREEN AREA AVAILABLE TO THE APP (EXCLUDING SOME OS UI AREAS).',
-  'PIXEL RATIO': 'DEVICE PIXEL RATIO (PHYSICAL PIXELS PER CSS PIXEL).',
-  'COLOR DEPTH': 'BITS USED TO REPRESENT COLOR ON THE DISPLAY.',
-  'HARDWARE CONCURRENCY': 'APPROXIMATE LOGICAL CPU CORE COUNT REPORTED BY THE BROWSER.',
-  'DEVICE MEMORY (GB)': 'APPROXIMATE DEVICE MEMORY IN GB (BROWSER HINT, LIMITED SUPPORT).',
-  'CPU CLASS': 'LEGACY CPU CLASS STRING (MOSTLY UNSUPPORTED MODERN BROWSERS).',
-  'PLATFORM TOKEN': 'PLATFORM TOKEN FROM USER-AGENT CLIENT HINTS (UA-CH) IF AVAILABLE.',
-  'UA BRANDS': 'BROWSER BRAND/VERSION TOKENS FROM USER-AGENT CLIENT HINTS.',
-  WEBDRIVER: 'TRUE CAN INDICATE AUTOMATION / WEBDRIVER-CONTROLLED BROWSER.',
-  'MAX TOUCH POINTS': 'MAXIMUM TOUCH CONTACTS SUPPORTED BY THE DEVICE.',
-  'SECURE CONTEXT': 'WHETHER THE PAGE IS RUNNING IN HTTPS/LOCALHOST SECURE CONTEXT.',
-  REFERRER: 'PAGE URL THAT REFERRED THE USER HERE (IF ANY).',
-  'TEST STATUS': 'CURRENT OR LAST SPEED TEST STATUS.',
-  'MEASURED PING (MS)': 'MEDIAN LATENCY MEASURED USING MULTIPLE SMALL FETCH REQUESTS.',
-  'MEASURED DOWNLOAD (MBPS)': 'ESTIMATED DOWNLOAD THROUGHPUT FROM A TEST FILE FETCH.',
-  'TRANSFER BYTES': 'NUMBER OF BYTES DOWNLOADED DURING THE SPEED TEST.',
-  'TRANSFER TIME (MS)': 'TIME SPENT DOWNLOADING THE TEST PAYLOAD.',
-  'TOTAL TEST TIME (MS)': 'FULL SPEED TEST DURATION INCLUDING LATENCY CHECKS.',
-  'EST DOWNLINK (MBPS)': 'BROWSER-REPORTED BANDWIDTH ESTIMATE (NOT MEASURED).',
-  'EST RTT (MS)': 'BROWSER-REPORTED LATENCY ESTIMATE (NOT MEASURED).',
-  SERVER: 'SERVER USED FOR THE SPEED TEST REQUESTS.',
-  'TESTED AT': 'TIMESTAMP WHEN THE LAST SPEED TEST FINISHED.'
-};
-
-const SNAPSHOT_TOOLTIPS = {
-  'snap-country': 'COUNTRY/REGION ESTIMATE BASED ON YOUR PUBLIC IP ADDRESS.',
-  'snap-city': 'CITY / REGION ESTIMATE BASED ON YOUR PUBLIC IP ADDRESS.',
-  'snap-isp': 'INTERNET SERVICE PROVIDER NAME FOR YOUR PUBLIC IP.',
-  'snap-timezone': 'TIME ZONE INFERRED FROM THE PUBLIC IP GEOLOCATION.',
-  'snap-browser-tz': 'TIME ZONE REPORTED DIRECTLY BY YOUR BROWSER / SYSTEM.',
-  'snap-viewport': 'CURRENT BROWSER VIEWPORT SIZE IN CSS PIXELS.'
-};
 
 init();
 
@@ -219,167 +148,6 @@ function bindAsciiControlsVisibilityToggle() {
     if (!panel) return;
     panel.classList.toggle('is-test-hidden');
   });
-}
-
-async function fetchPublicIpOnly() {
-  const attempts = [];
-  const providers = [
-    async () => {
-      const res = await fetch('https://api64.ipify.org?format=json', { headers: { accept: 'application/json' } });
-      if (!res.ok) throw new Error(`IPIFY64 HTTP ${res.status}`);
-      const data = await res.json();
-      return data?.ip;
-    },
-    async () => {
-      const res = await fetch('https://api.ipify.org?format=json', { headers: { accept: 'application/json' } });
-      if (!res.ok) throw new Error(`IPIFY HTTP ${res.status}`);
-      const data = await res.json();
-      return data?.ip;
-    },
-    async () => {
-      const res = await fetch('https://ipwho.is/', { headers: { accept: 'application/json' } });
-      if (!res.ok) throw new Error(`IPWHO.IS HTTP ${res.status}`);
-      const data = await res.json();
-      if (data && data.success === false) throw new Error(data.message || 'IPWHO.IS FAILED');
-      return data?.ip;
-    }
-  ];
-
-  for (const provider of providers) {
-    try {
-      const ip = await provider();
-      if (ip) return ip;
-      attempts.push('MISSING IP');
-    } catch (error) {
-      attempts.push(String(error?.message || error));
-    }
-  }
-
-  throw new Error(`PUBLIC IP FAILED / ${attempts.join(' / ')}`);
-}
-
-async function fetchIpData() {
-  const attempts = [];
-
-  try {
-    const res = await fetch('https://ipwho.is/', { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`IPWHO.IS HTTP ${res.status}`);
-    const data = await res.json();
-    if (data && data.success === false) throw new Error(data.message || 'IPWHO.IS FAILED');
-    return data;
-  } catch (error) {
-    attempts.push(String(error?.message || error));
-  }
-
-  try {
-    const res = await fetch('https://ipwhois.io/', { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`IPWHOIS.IO HTTP ${res.status}`);
-    const data = await res.json();
-    if (data && data.success === false) throw new Error(data.message || 'IPWHOIS.IO FAILED');
-    return normalizeIpWhoisIo(data);
-  } catch (error) {
-    attempts.push(String(error?.message || error));
-  }
-
-  try {
-    const res = await fetch('https://ipapi.co/json/', { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`IPAPI.CO HTTP ${res.status}`);
-    const data = await res.json();
-    if (data?.error) throw new Error(data.reason || data.message || 'IPAPI.CO FAILED');
-    return normalizeIpApiCo(data);
-  } catch (error) {
-    attempts.push(String(error?.message || error));
-  }
-
-  try {
-    const res = await fetch('https://api64.ipify.org?format=json', { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`IPIFY HTTP ${res.status}`);
-    const data = await res.json();
-    if (!data?.ip) throw new Error('IPIFY MISSING IP');
-    return normalizeIpOnly(data.ip);
-  } catch (error) {
-    attempts.push(String(error?.message || error));
-  }
-
-  throw new Error(`IP LOOKUP FAILED / ${attempts.join(' / ')}`);
-}
-
-function normalizeIpOnly(ip) {
-  return {
-    ip,
-    type: inferIpType(ip),
-    connection: {},
-    timezone: {},
-    flag: {}
-  };
-}
-
-function normalizeIpWhoisIo(data) {
-  const tzId = data.timezone?.id;
-  return {
-    ip: data.ip,
-    type: data.type,
-    country: data.country,
-    country_code: data.country_code,
-    region: data.region,
-    city: data.city,
-    postal: data.postal,
-    latitude: numberOrUndefined(data.latitude),
-    longitude: numberOrUndefined(data.longitude),
-    connection: {
-      isp: data.connection?.isp,
-      org: data.connection?.org,
-      asn: data.connection?.asn,
-      domain: data.connection?.domain,
-      hostname: data.connection?.hostname
-    },
-    flag: {
-      emoji: data.flag?.emoji
-    },
-    timezone: {
-      id: tzId,
-      abbr: data.timezone?.abbr,
-      utc: data.timezone?.utc,
-      current_time: tzId ? currentTimeForZone(tzId) : undefined,
-      is_dst: typeof data.timezone?.is_dst === 'boolean' ? data.timezone.is_dst : (tzId ? isDstNowInZone(tzId) : undefined)
-    },
-    security: data.security
-  };
-}
-
-function normalizeIpApiCo(data) {
-  const tzId = data.timezone;
-  const utc = formatIpApiUtcOffset(data.utc_offset);
-
-  return {
-    ip: data.ip,
-    type: data.version ? `IPv${data.version}` : undefined,
-    country: data.country_name || data.country,
-    country_code: data.country_code,
-    region: data.region,
-    city: data.city,
-    postal: data.postal,
-    latitude: numberOrUndefined(data.latitude),
-    longitude: numberOrUndefined(data.longitude),
-    connection: {
-      isp: data.org,
-      org: data.org,
-      asn: data.asn,
-      domain: undefined,
-      hostname: undefined
-    },
-    flag: {
-      emoji: countryCodeToFlagEmoji(data.country_code)
-    },
-    timezone: {
-      id: tzId,
-      abbr: undefined,
-      utc,
-      current_time: tzId ? currentTimeForZone(tzId) : undefined,
-      is_dst: tzId ? isDstNowInZone(tzId) : undefined
-    },
-    security: undefined
-  };
 }
 
 function renderIpData(ipData, client) {
@@ -1096,93 +864,6 @@ function yesNo(value) {
 function formatLatLon(lat, lon) {
   if (typeof lat !== 'number' || typeof lon !== 'number') return 'N/A';
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-}
-
-function inferIpType(ip) {
-  if (!ip) return undefined;
-  return String(ip).includes(':') ? 'IPv6' : 'IPv4';
-}
-
-function numberOrUndefined(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function formatIpApiUtcOffset(value) {
-  if (!value && value !== 0) return undefined;
-  const str = String(value).trim();
-  if (!str) return undefined;
-  if (/^[+-]\d{2}:?\d{2}$/.test(str)) {
-    return str.includes(':') ? str : `${str.slice(0, 3)}:${str.slice(3)}`;
-  }
-  return str;
-}
-
-function countryCodeToFlagEmoji(code) {
-  if (!code || String(code).length !== 2) return undefined;
-  const cc = String(code).toUpperCase();
-  const base = 127397;
-  try {
-    return String.fromCodePoint(...cc.split('').map((char) => base + char.charCodeAt(0)));
-  } catch {
-    return undefined;
-  }
-}
-
-function currentTimeForZone(timeZone) {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).format(new Date());
-  } catch {
-    return undefined;
-  }
-}
-
-function isDstNowInZone(timeZone) {
-  try {
-    const now = new Date();
-    const jan = new Date(now.getFullYear(), 0, 1);
-    const jul = new Date(now.getFullYear(), 6, 1);
-    const nowOffset = zonedOffsetMinutes(now, timeZone);
-    const janOffset = zonedOffsetMinutes(jan, timeZone);
-    const julOffset = zonedOffsetMinutes(jul, timeZone);
-    const baseline = Math.max(janOffset, julOffset);
-    return nowOffset < baseline;
-  } catch {
-    return undefined;
-  }
-}
-
-function zonedOffsetMinutes(date, timeZone) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  }).formatToParts(date);
-
-  const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
-  const asUtc = Date.UTC(
-    Number(map.year),
-    Number(map.month) - 1,
-    Number(map.day),
-    Number(map.hour),
-    Number(map.minute),
-    Number(map.second)
-  );
-  return (asUtc - date.getTime()) / 60000;
 }
 
 function normalizeDisplayValue(value) {
