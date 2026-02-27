@@ -49,8 +49,10 @@ const els = {
 
 const state = {
   ipApi: null,
+  currentIp: '',
   client: null,
   speedTest: null,
+  ipCopyResetTimer: 0,
   asciiFx: { ...DEFAULT_ASCII_TUNING }
 };
 
@@ -69,6 +71,7 @@ async function init() {
   primeAsciiStaticTexts();
   bindAsciiHoverReplay();
   bindIpAutofit();
+  bindIpCopyToClipboard();
   const client = collectClientData();
   state.client = client;
   renderHeroCopy(client);
@@ -80,6 +83,7 @@ async function init() {
     .then((ip) => {
       if (!ip) return null;
       seededIp = ip;
+      state.currentIp = String(ip);
       setAsciiText(els.ip, ip, { onFrame: fitIpHeading, onDone: fitIpHeading });
       return ip;
     })
@@ -98,6 +102,7 @@ async function init() {
       renderIpData(ipOnly, client);
       setAsciiText(els.summary, "I could read your IP, but the location provider didn't return full details.");
     } else {
+      state.currentIp = 'UNAVAILABLE';
       setAsciiText(els.ip, 'UNAVAILABLE', { onFrame: fitIpHeading, onDone: fitIpHeading });
       setAsciiText(els.summary, "I couldn't read your public IP details right now.");
     }
@@ -151,7 +156,8 @@ function bindAsciiControlsVisibilityToggle() {
 }
 
 function renderIpData(ipData, client) {
-  setAsciiText(els.ip, ipData.ip || 'UNKNOWN', { onFrame: fitIpHeading, onDone: fitIpHeading });
+  state.currentIp = String(ipData.ip || 'UNKNOWN');
+  setAsciiText(els.ip, state.currentIp, { onFrame: fitIpHeading, onDone: fitIpHeading });
   setAsciiText(els.summary, compactSummary(ipData, client));
   renderSnapshots(ipData, client);
 
@@ -213,6 +219,99 @@ function bindIpAutofit() {
     document.fonts.ready.then(schedule).catch(() => {});
   }
   schedule();
+}
+
+function bindIpCopyToClipboard() {
+  if (!els.ip) return;
+
+  els.ip.style.cursor = 'copy';
+  els.ip.title = 'CLICK TO COPY PUBLIC IP';
+  els.ip.setAttribute('role', 'button');
+  els.ip.setAttribute('tabindex', '0');
+  els.ip.setAttribute('aria-label', 'IP ADDRESS. CLICK TO COPY TO CLIPBOARD.');
+
+  const handleCopy = async () => {
+    const fallbackText = String(els.ip.textContent || '').replace(/\s+/g, '');
+    const currentIp = String(state.currentIp || state.ipApi?.ip || fallbackText || '').trim();
+    if (!currentIp || /^(UNKNOWN|UNAVAILABLE|LOADING\.\.\.)$/i.test(currentIp)) return;
+
+    // Show immediate feedback before clipboard APIs resolve.
+    if (state.ipCopyResetTimer) window.clearTimeout(state.ipCopyResetTimer);
+    setIpHeadingInstant('COPIED');
+    const copiedAnimMs = animateCopiedFeedback();
+
+    let copied = legacyCopyText(currentIp);
+    if (!copied && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(currentIp);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+
+    state.ipCopyResetTimer = window.setTimeout(() => {
+      const restoreIp = String(state.currentIp || state.ipApi?.ip || currentIp || 'UNKNOWN');
+      setAsciiText(els.ip, restoreIp, { force: true, onFrame: fitIpHeading, onDone: fitIpHeading });
+      state.ipCopyResetTimer = 0;
+    }, copied ? copiedAnimMs + 120 : copiedAnimMs);
+  };
+
+  els.ip.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    handleCopy().catch(() => {});
+  });
+  els.ip.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleCopy().catch(() => {});
+  });
+}
+
+function setIpHeadingInstant(text) {
+  if (!els.ip) return;
+  const prevToken = asciiRevealTokens.get(els.ip);
+  if (prevToken) prevToken.cancelled = true;
+  const finalText = String(text ?? '');
+  els.ip.dataset.asciiFinal = finalText;
+  els.ip.classList.remove('is-scrambling');
+  els.ip.textContent = finalText;
+  els.ip.classList.add('ascii-fx');
+  fitIpHeading();
+}
+
+function animateCopiedFeedback() {
+  if (!els.ip) return 0;
+  renderAsciiChars(els.ip, 'COPIED');
+  const chars = Array.from(els.ip.querySelectorAll('.ascii-fx-char'));
+  chars.forEach((charEl, index) => {
+    window.setTimeout(() => {
+      if (charEl instanceof HTMLElement) scrambleCharSpan(charEl, 0.85);
+    }, index * 28);
+  });
+  fitIpHeading();
+  return chars.length * 28 + asciiCharHoverDurationMs(0.85);
+}
+
+function legacyCopyText(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.left = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const copied = typeof document.execCommand === 'function' && document.execCommand('copy');
+    ta.remove();
+    return !!copied;
+  } catch {
+    return false;
+  }
 }
 
 function fitIpHeading() {
